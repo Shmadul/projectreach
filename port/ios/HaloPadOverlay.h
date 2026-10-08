@@ -29,6 +29,9 @@ NS_ASSUME_NONNULL_BEGIN
 /* Switch Edition: what stays saved when HaloPad closes so the player can choose the
    other edition on the next open (iOS apps cannot relaunch themselves). Nil hides it. */
 - (nullable NSString *)overlayEditionSwitchNote:(HPOverlay *)overlay;
+/* Windows edition only: forget the remembered check of the game files, so the next launch
+   shows the import screen (choose other files, or check the same ones again). */
+- (void)overlayForgetGameFiles:(HPOverlay *)overlay;
 @end
 
 typedef NS_ENUM(NSInteger, HPAspectMode) { HPAspectOriginal = 0, HPAspectFill = 1 };

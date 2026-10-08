@@ -1062,6 +1062,9 @@ static NSString * const HPRepositoryURL = @"https://github.com/chrissotraidis/pr
     if ([self.delegate respondsToSelector:@selector(overlayEditionSwitchNote:)] && [self.delegate overlayEditionSwitchNote:self])
         [last addObject:[UIAction actionWithTitle:@"Switch Edition…" image:icon(@"arrow.left.arrow.right") identifier:nil
                                           handler:^(__kindof UIAction *a) { [weak confirmEditionSwitch]; }]];
+    if ([self.delegate respondsToSelector:@selector(overlayForgetGameFiles:)])
+        [last addObject:[UIAction actionWithTitle:@"Change Game Files…" image:icon(@"folder.badge.gearshape") identifier:nil
+                                          handler:^(__kindof UIAction *a) { [weak confirmChangeGameFiles]; }]];
 
     NSMutableArray<UIMenuElement *> *groups = [NSMutableArray array];
     for (NSArray<UIMenuElement *> *group in @[play, setup, last])
@@ -1083,6 +1086,26 @@ static NSString * const HPRepositoryURL = @"https://github.com/chrissotraidis/pr
     [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     [a addAction:[UIAlertAction actionWithTitle:@"Close HaloPad" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *x) {
         [HPOverlay closeForEditionSwitch];
+    }]];
+    [self.presenter presentViewController:a animated:YES completion:nil];
+}
+
+/* The next launch shows the import screen: choose other Custom Edition files there, or the
+   same ones again (checked in full). Like Switch Edition, HaloPad closes to get there. */
+- (void)confirmChangeGameFiles
+{
+    [self clearTouchInput];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Change Game Files"
+        message:@"HaloPad will close. Open it again to choose your Halo Custom Edition files: a prepared package or folder, or the same files, checked again in full. Your profile, settings and custom maps stay."
+        preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    __weak HPOverlay *weak = self;
+    [a addAction:[UIAlertAction actionWithTitle:@"Close HaloPad" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *x) {
+        HPOverlay *strong = weak;
+        if (strong) [strong.delegate overlayForgetGameFiles:strong];
+        HP_LOG("App: closing to choose the game files again (player request)");
+        fflush(NULL);
+        _exit(0);
     }]];
     [self.presenter presentViewController:a animated:YES completion:nil];
 }

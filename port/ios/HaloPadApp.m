@@ -14,6 +14,7 @@
  * (scripts/build-ios-app.py passes HALOPAD_* through simctl launch). */
 #import <UIKit/UIKit.h>
 #include <unistd.h>
+#include <CommonCrypto/CommonDigest.h>
 #import <AVFoundation/AVFoundation.h>
 #import <GameController/GameController.h>
 #include <stdio.h>
@@ -406,6 +407,54 @@ static NSString *game_dir_problem(NSString *directory)
     return HPGameDirectoryProblem(directory, game_core_identity());
 }
 
+/* A full check hashes every game file (seconds on a phone). After one passes, the folder's
+   fingerprint (each file's path, size and modification time, and this build's core identity)
+   is kept in the state folder; a later launch whose folder still matches it starts Halo
+   directly, and any change to the folder or the app's core brings the full check back. */
+static NSString *verified_marker(void)
+{
+    const char *state = getenv("HALOPAD_STATE_ROOT");
+    return state ? [@(state) stringByAppendingPathComponent:@"verified-game.txt"] : nil;
+}
+
+static NSString *game_dir_fingerprint(NSString *directory)
+{
+    NSURL *root = [NSURL fileURLWithPath:directory isDirectory:YES];
+    NSArray<NSURLResourceKey> *keys = @[NSURLIsRegularFileKey, NSURLFileSizeKey, NSURLContentModificationDateKey];
+    NSDirectoryEnumerator<NSURL *> *walk = [NSFileManager.defaultManager enumeratorAtURL:root includingPropertiesForKeys:keys options:0 errorHandler:nil];
+    NSMutableArray<NSString *> *lines = [NSMutableArray array];
+    for (NSURL *url in walk) {
+        NSDictionary<NSURLResourceKey, id> *v = [url resourceValuesForKeys:keys error:nil];
+        if (![v[NSURLIsRegularFileKey] boolValue]) continue;
+        NSString *relative = [url.path substringFromIndex:MIN(url.path.length, root.path.length + 1)];
+        [lines addObject:[NSString stringWithFormat:@"%@\t%llu\t%.6f", relative, [v[NSURLFileSizeKey] unsignedLongLongValue],
+            [v[NSURLContentModificationDateKey] timeIntervalSince1970]]];
+    }
+    if (!lines.count) return nil;
+    [lines sortUsingSelector:@selector(compare:)];
+    NSData *identity = [NSJSONSerialization dataWithJSONObject:game_core_identity() ?: @{} options:NSJSONWritingSortedKeys error:nil];
+    NSMutableData *all = [[[lines componentsJoinedByString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding] mutableCopy];
+    [all appendData:identity ?: NSData.data];
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(all.bytes, (CC_LONG)all.length, digest);
+    NSMutableString *hex = [NSMutableString string];
+    for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) [hex appendFormat:@"%02x", digest[i]];
+    return hex;
+}
+
+static BOOL game_dir_unchanged_since_check(NSString *directory)
+{
+    NSString *marker = verified_marker(), *now = game_dir_fingerprint(directory);
+    NSString *saved = marker ? [NSString stringWithContentsOfFile:marker encoding:NSUTF8StringEncoding error:nil] : nil;
+    return now && [saved isEqualToString:now];
+}
+
+static void remember_game_dir_check(NSString *directory)
+{
+    NSString *marker = verified_marker(), *now = game_dir_fingerprint(directory);
+    if (marker && now) [now writeToFile:marker atomically:YES encoding:NSUTF8StringEncoding error:nil];
+}
+
 /* the app's own paths, when the environment does not name the Mac's */
 static void resolve_device_paths(void)
 {
@@ -506,6 +555,7 @@ static void resolve_device_paths(void)
     self.status.text = @"Verifying your installed game files…";
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSString *problem = game_dir_problem(documents_game_dir());
+        if (!problem) remember_game_dir_check(documents_game_dir());
         dispatch_async(dispatch_get_main_queue(), ^{
             self.status.text = problem ?: @"Game data verified. Starting…";
             if (problem) {
@@ -1234,7 +1284,13 @@ static void touch_selftest(void)
     else if (getenv("HALOPAD_ACTION_SELFTEST")) after(5, ^{ action_selftest(); });
     else if (getenv("HALOPAD_TOUCH_SELFTEST")) after(5, ^{ touch_selftest(); });
     if (getenv("HALOPAD_GAME_ROOT")) { [self startHalo]; return; }
-    /* no game folder yet: the import screen, then Halo */
+    if (game_dir_unchanged_since_check(documents_game_dir())) {
+        halopad_log("Game data: unchanged since its last full check; starting without the import screen");
+        setenv("HALOPAD_GAME_ROOT", documents_game_dir().UTF8String, 1);
+        [self startHalo];
+        return;
+    }
+    /* no game folder yet, or it changed: the import screen (its full check), then Halo */
     HPImportViewController *imp = [HPImportViewController new];
     imp.modalPresentationStyle = UIModalPresentationFormSheet;
     imp.modalInPresentation = YES;
@@ -1388,6 +1444,12 @@ static NSString *custom_map_problem(NSURL *url, NSString **name)
     return [NSString stringWithFormat:@"HaloPad %@ (%@)\nHalo Custom Edition 1.10, translated to run natively.\n\n"
             "Game files: Files app → HaloPad → Halo Custom Edition\nCustom maps installed: %lu\n\n"
             "HaloPad needs your own copy of Halo. It includes no game data.", ver, build, (unsigned long)maps.count];
+}
+- (void)overlayForgetGameFiles:(HPOverlay *)o
+{
+    NSString *marker = verified_marker();
+    if (marker) [NSFileManager.defaultManager removeItemAtPath:marker error:nil];
+    halopad_log("Game data: the remembered check is cleared; the next launch shows the import screen");
 }
 /* Only builds with the edition picker (HaloPadXbox.m) offer Switch Edition. */
 extern UIViewController *HPEngineChooserMake(UIViewController *(^makePC)(void)) __attribute__((weak));
