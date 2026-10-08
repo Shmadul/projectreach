@@ -228,6 +228,26 @@ uint32_t xh_host_gl_read_buffer_word(uint32_t buffer, uint32_t offset)
 	return value;
 }
 
+/* copies size bytes of a buffer object into guest memory (upstream's
+host_gl_read_buffer, newer than the pinned build: the snapshots of the
+visibility tests' counters). ES has no glGetBufferSubData, so this maps
+GL_COPY_READ_BUFFER, which the renderer uses only for its copies. */
+void xh_host_gl_read_buffer(uint32_t buffer, uint32_t offset, uint32_t size, uint32_t data)
+{
+	const void *mapping;
+	helpers_load();
+	p_glBindBuffer(GL_COPY_READ_BUFFER, buffer);
+	mapping = p_glMapBufferRange(GL_COPY_READ_BUFFER, offset, size, GL_MAP_READ_BIT);
+	if (mapping)
+	{
+		memcpy(G(void *, data), mapping, size);
+		p_glUnmapBuffer(GL_COPY_READ_BUFFER);
+	}
+	else
+		memset(G(void *, data), 0, size);
+	p_glBindBuffer(GL_COPY_READ_BUFFER, 0);
+}
+
 void xh_host_gl_buffer_write(uint32_t target, uint32_t offset, uint32_t size, uint32_t data)
 {
 	void *mapping;

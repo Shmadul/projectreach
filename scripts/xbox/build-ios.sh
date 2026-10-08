@@ -115,7 +115,7 @@ if [ "$RENDERER" = angle-metal ]; then
 fi
 SYSROOT=$(xcrun --sdk $XSDK --show-sdk-path)
 CC="xcrun --sdk $XSDK clang -target $TARGET -isysroot $SYSROOT $CATALYST"
-CFLAGS="-O2 -g -Wall -Wno-unused-function -DGLES_SILENCE_DEPRECATION -fobjc-arc -I$ROOT/port/xbox -I$OUT -I/opt/homebrew/include $ANGLE_FLAGS"
+CFLAGS="-O2 -g -Wall -Wno-unused-function -DGLES_SILENCE_DEPRECATION -fobjc-arc -I$ROOT/port/xbox -I$OUT -I${XG_SDL_INCLUDE:-/opt/homebrew/include} $ANGLE_FLAGS"
 mkdir -p "$OBJ" "$APP"
 for f in xg_memory xg_thread xg_syscall xg_gl xg_posix xg_xiso; do
 	$CC $CFLAGS -I"$INC" -c "$ROOT/port/xbox/$f.c" -o "$OBJ/$f.o"
@@ -127,6 +127,14 @@ done
 for f in posix_files posix_net; do
 	$CC -O2 -w -include "$ROOT/port/xbox/xg_darwin_compat.h" -I"$ROOT/port/xbox/compat" -I"$ENGINE/port/linux/src" \
 		-c "$ENGINE/port/linux/src/$f.c" -o "$OBJ/upstream_$f.o"
+done
+# internet play's UPnP: upstream's posix_upnp.c and its miniupnpc, as its Android host builds them
+UPNP="$ENGINE/port/third_party/miniupnpc"
+UPNP_FLAGS="-I$UPNP/include -I$UPNP/src -DMINIUPNP_STATICLIB -DMINIUPNPC_SET_SOCKET_TIMEOUT -DMINIUPNPC_GET_SRC_ADDR -D_BSD_SOURCE -D_DEFAULT_SOURCE"
+$CC -O2 -w -include "$ROOT/port/xbox/xg_darwin_compat.h" -I"$ROOT/port/xbox/compat" -I"$ENGINE/port/linux/src" $UPNP_FLAGS \
+	-c "$ENGINE/port/linux/src/posix_upnp.c" -o "$OBJ/upstream_posix_upnp.o"
+for f in "$UPNP"/src/*.c; do
+	$CC -O2 -w $UPNP_FLAGS -c "$f" -o "$OBJ/miniupnpc_$(basename "$f" .c).o"
 done
 $CC -c "$ROOT/port/xbox/xg_runtime.s" -o "$OBJ/xg_runtime.o"
 [ "$OBJ/guest.o" -nt "$OUT/guest.s" ] || $CC -c "$OUT/guest.s" -o "$OBJ/guest.o"
@@ -174,13 +182,14 @@ GL_LINK="-framework OpenGLES"
 $CC -o "$APP/HaloPadXbox" "$OBJ"/*.o $ANGLE_LIB -framework UIKit -framework QuartzCore $GL_LINK \
 	-framework GameController -framework AudioToolbox -framework AVFoundation -framework Foundation -framework CoreFoundation -framework CoreGraphics
 cp "$OUT/halo_guest.elf" "$APP/halo_guest.elf"
+cp "$OUT/brokers.txt" "$APP/brokers.txt"           # the test app writes it beside config.toml (xg_app_ios.m)
 PLATFORM=iPhoneSimulator
 [ "$SDK" = iphoneos ] && PLATFORM=iPhoneOS
 cat > "$APP/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>CFBundleIdentifier</key><string>dev.halopad.HaloPad.xbox-test</string>
+<key>CFBundleIdentifier</key><string>${XG_BUNDLE_ID:-dev.halopad.HaloPad.xbox-test}</string>
 <key>CFBundleName</key><string>HaloPad Xbox</string>
 <key>CFBundleExecutable</key><string>HaloPadXbox</string>
 <key>CFBundlePackageType</key><string>APPL</string>
@@ -195,6 +204,7 @@ cat > "$APP/Info.plist" <<EOF
 <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
 <key>UISupportedInterfaceOrientations~ipad</key><array><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
 <key>GCSupportsControllerUserInteraction</key><true/>
+<key>NSLocalNetworkUsageDescription</key><string>Halo finds system link games and asks your router to open a port for internet play (UPnP).</string>
 <key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
 <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
 <key>CFBundleDisplayName</key><string>HaloPad Xbox</string>
@@ -206,6 +216,7 @@ cat > "$OUT/xbox.entitlements" <<EOF
 <plist version="1.0"><dict>
 <key>com.apple.developer.kernel.extended-virtual-addressing</key><true/>
 <key>com.apple.developer.kernel.increased-memory-limit</key><true/>
+$( [ -z "${XG_TEAM_ID:-}" ] || printf '<key>application-identifier</key><string>%s.%s</string>\n<key>com.apple.developer.team-identifier</key><string>%s</string>\n<key>get-task-allow</key><false/>' "$XG_TEAM_ID" "${XG_BUNDLE_ID:-dev.halopad.HaloPad.xbox-test}" "$XG_TEAM_ID" )
 </dict></plist>
 EOF
 [ -z "$PROFILE" ] || cp "$PROFILE" "$APP/embedded.mobileprovision"

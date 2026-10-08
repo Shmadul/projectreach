@@ -52,6 +52,9 @@ int posix_socket_getsockname(int, void *, int *);
 int posix_socket_getpeername(int, void *, int *);
 int posix_socket_select(int *, int *, int *, int *, int *, int *, posix_long, posix_long, int);
 posix_ulong posix_local_ipv4_address(void);
+int posix_upnp_forward_udp(unsigned short port, unsigned short preferred_port, posix_ulong *external_address,
+	unsigned short *external_port, char *error, int error_size);
+void posix_upnp_stop_forwarding_udp(unsigned short external_port);
 void posix_random_bytes(void *, posix_ulong);
 posix_ulong posix_resolve_ipv4(const char *);
 int posix_command_line_argument(int, char *, posix_ulong);
@@ -242,7 +245,9 @@ posix_ulong xh_hostposix_local_ipv4_address(void) { return posix_local_ipv4_addr
 void xh_hostposix_random_bytes(uint32_t buffer, posix_ulong size) { posix_random_bytes(G(void *, buffer), size); }
 posix_ulong xh_hostposix_resolve_ipv4(uint32_t host) { return posix_resolve_ipv4(G(const char *, host)); }
 
-/* ---------- UPnP: not wired up yet on Apple platforms */
+/* ---------- UPnP: upstream's posix_upnp.c with miniupnpc (scripts/xbox/build-ios.sh),
+as on Android: lets internet play ask the router to forward its port, which strict
+(port-per-destination) NATs need */
 
 int xh_hostposix_upnp_forward_udp(unsigned short port,
 #if XG_UPNP_PREFERRED_PORT
@@ -250,16 +255,14 @@ int xh_hostposix_upnp_forward_udp(unsigned short port,
 #endif
     uint32_t address, uint32_t external_port, uint32_t error, int size)
 {
-	(void)port; (void)address; (void)external_port;
-#if XG_UPNP_PREFERRED_PORT
-	(void)preferred_port;
+#if !XG_UPNP_PREFERRED_PORT
+	unsigned short preferred_port = 0;
 #endif
-	if (error && size > 0)
-		strlcpy(G(char *, error), "UPnP is not available in HaloPad yet", (size_t)size);
-	return 0;
+	return posix_upnp_forward_udp(port, preferred_port, address ? G(posix_ulong *, address) : NULL,
+		external_port ? G(unsigned short *, external_port) : NULL, error ? G(char *, error) : NULL, error ? size : 0);
 }
 
-void xh_hostposix_upnp_stop_forwarding_udp(unsigned short port) { (void)port; }
+void xh_hostposix_upnp_stop_forwarding_udp(unsigned short port) { posix_upnp_stop_forwarding_udp(port); }
 
 /* ---------- the process and the desktop */
 
