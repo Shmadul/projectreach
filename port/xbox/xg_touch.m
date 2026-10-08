@@ -16,7 +16,11 @@
 #include "xg_ios.h"
 
 #define STICK_RADIUS 70.0
-#define LOOK_SPEED 900.0 /* points per second for a full right stick */
+#define LOOK_SPEED 900.0 /* points per second for a full right stick at 1x */
+#define LOOK_SENSITIVITY_KEY @"XGTouchLookSensitivity"
+#define LOOK_SENSITIVITY_MIN 0.1f
+#define LOOK_SENSITIVITY_MAX 8.0f
+#define OVERLAY_OFF_KEY @"XGTouchOverlayOff"
 
 struct touch_button
 {
@@ -49,6 +53,13 @@ static const struct touch_button buttons[] =
 	NSArray<UIView *> *button_views;
 	UIView *stick_base, *stick_knob;
 	UIButton *start_button, *back_button;
+	UIButton *sensitivity_button;
+	UIView *sensitivity_panel;
+	UISlider *sensitivity_slider;
+	UILabel *sensitivity_label;
+	float look_sensitivity;
+	UIButton *hide_button, *show_button;  /* the overlay off, and the faint button that brings it back */
+	BOOL overlay_off;
 	struct xg_touch_pad state;
 	CADisplayLink *link;
 	BOOL inactive;
@@ -96,6 +107,8 @@ static const struct touch_button buttons[] =
 	[self addSubview:stick_knob];
 	start_button = [self smallButton:@"Start" button:SDL_GAMEPAD_BUTTON_START];
 	back_button = [self smallButton:@"Back" button:SDL_GAMEPAD_BUTTON_BACK];
+	[self makeSensitivityControls];
+	[self makeOverlayToggle];
 	link = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick)];
 	[link addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
 	[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(applicationWillResignActive:)
@@ -135,6 +148,89 @@ static const struct touch_button buttons[] =
 	return view;
 }
 
+/* look sensitivity: a "Sens" button opens a slider, kept in the user defaults */
+- (void)makeSensitivityControls
+{
+	NSNumber *saved = [NSUserDefaults.standardUserDefaults objectForKey:LOOK_SENSITIVITY_KEY];
+	look_sensitivity = saved ? fmaxf(LOOK_SENSITIVITY_MIN, fminf(LOOK_SENSITIVITY_MAX, saved.floatValue)) : 1.0f;
+	sensitivity_button = [UIButton buttonWithType:UIButtonTypeSystem];
+	[sensitivity_button setTitle:@"Sens" forState:UIControlStateNormal];
+	[sensitivity_button setTitleColor:[UIColor colorWithWhite:1 alpha:0.85] forState:UIControlStateNormal];
+	sensitivity_button.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+	sensitivity_button.backgroundColor = [UIColor colorWithWhite:0 alpha:0.28];
+	sensitivity_button.layer.cornerRadius = 14;
+	[sensitivity_button addTarget:self action:@selector(toggleSensitivity) forControlEvents:UIControlEventTouchUpInside];
+	[self addSubview:sensitivity_button];
+	sensitivity_panel = [UIView new];
+	sensitivity_panel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.6];
+	sensitivity_panel.layer.cornerRadius = 14;
+	sensitivity_panel.hidden = YES;
+	sensitivity_label = [UILabel new];
+	sensitivity_label.textColor = [UIColor colorWithWhite:1 alpha:0.9];
+	sensitivity_label.font = [UIFont monospacedDigitSystemFontOfSize:14 weight:UIFontWeightSemibold];
+	sensitivity_slider = [UISlider new];
+	sensitivity_slider.minimumValue = LOOK_SENSITIVITY_MIN;
+	sensitivity_slider.maximumValue = LOOK_SENSITIVITY_MAX;
+	sensitivity_slider.value = look_sensitivity;
+	[sensitivity_slider addTarget:self action:@selector(sensitivityChanged) forControlEvents:UIControlEventValueChanged];
+	[sensitivity_panel addSubview:sensitivity_label];
+	[sensitivity_panel addSubview:sensitivity_slider];
+	[self addSubview:sensitivity_panel];
+	[self updateSensitivityLabel];
+}
+
+/* the overlay can be turned off (a controller, a keyboard, or just watching): everything
+hides and stops taking touches except a faint "Controls" button that turns it on again */
+- (UIButton *)topButton:(NSString *)title action:(SEL)action
+{
+	UIButton *view = [UIButton buttonWithType:UIButtonTypeSystem];
+	[view setTitle:title forState:UIControlStateNormal];
+	[view setTitleColor:[UIColor colorWithWhite:1 alpha:0.85] forState:UIControlStateNormal];
+	view.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+	view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.28];
+	view.layer.cornerRadius = 14;
+	[view addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+	[self addSubview:view];
+	return view;
+}
+
+- (void)makeOverlayToggle
+{
+	hide_button = [self topButton:@"Hide" action:@selector(hideOverlay)];
+	show_button = [self topButton:@"Controls" action:@selector(showOverlay)];
+	show_button.alpha = 0.18;
+	[self setOverlayOff:[NSUserDefaults.standardUserDefaults boolForKey:OVERLAY_OFF_KEY]];
+}
+
+- (void)setOverlayOff:(BOOL)off
+{
+	if (off) [self cancelInput];
+	overlay_off = off;
+	for (UIView *view in self.subviews)
+		view.hidden = off ? view != show_button : (view == show_button || view == stick_base || view == stick_knob || view == sensitivity_panel);
+	[NSUserDefaults.standardUserDefaults setBool:off forKey:OVERLAY_OFF_KEY];
+}
+
+- (void)hideOverlay { [self setOverlayOff:YES]; }
+- (void)showOverlay { [self setOverlayOff:NO]; }
+
+- (void)updateSensitivityLabel
+{
+	sensitivity_label.text = [NSString stringWithFormat:@"Look sensitivity  %.2fx", look_sensitivity];
+}
+
+- (void)toggleSensitivity
+{
+	sensitivity_panel.hidden = !sensitivity_panel.hidden;
+}
+
+- (void)sensitivityChanged
+{
+	look_sensitivity = roundf(sensitivity_slider.value * 20) / 20; /* steps of 0.05 */
+	[NSUserDefaults.standardUserDefaults setFloat:look_sensitivity forKey:LOOK_SENSITIVITY_KEY];
+	[self updateSensitivityLabel];
+}
+
 - (void)smallDown:(UIButton *)sender
 {
 	if (inactive || self.hidden) return;
@@ -159,11 +255,18 @@ static const struct touch_button buttons[] =
 		button_views[index].frame = [self frameOfButton:index];
 	start_button.frame = CGRectMake(self.bounds.size.width / 2 + 10, safe.top + 12, 70, 32);
 	back_button.frame = CGRectMake(self.bounds.size.width / 2 - 80, safe.top + 12, 70, 32);
+	sensitivity_button.frame = CGRectMake(self.bounds.size.width / 2 + 90, safe.top + 12, 60, 32);
+	hide_button.frame = CGRectMake(self.bounds.size.width / 2 + 160, safe.top + 12, 60, 32);
+	show_button.frame = CGRectMake(MAX(safe.left, 12) + 8, safe.top + 12, 84, 32);
+	sensitivity_panel.frame = CGRectMake(self.bounds.size.width / 2 - 160, safe.top + 52, 320, 76);
+	sensitivity_label.frame = CGRectMake(16, 8, 288, 24);
+	sensitivity_slider.frame = CGRectMake(16, 36, 288, 32);
 }
 
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event
 {
 	UIView *hit = [super hitTest:point withEvent:event];
+	if (overlay_off) return hit == show_button ? hit : nil;   /* off: only the faint button takes touches */
 	return self.hidden ? nil : hit;
 }
 
@@ -187,7 +290,7 @@ static const struct touch_button buttons[] =
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event
 {
-	if (inactive || self.hidden) return;
+	if (inactive || self.hidden || overlay_off) return;
 	for (UITouch *touch in touches)
 	{
 		CGPoint point = [touch locationInView:self];
@@ -306,8 +409,8 @@ static const struct touch_button buttons[] =
 {
 	if (inactive || self.hidden) return;
 	/* Publish look on the touch event, not only on the next display tick. */
-	state.axes[2] = (float)fmax(-1.0, fmin(1.0, look_velocity.x / LOOK_SPEED));
-	state.axes[3] = (float)fmax(-1.0, fmin(1.0, look_velocity.y / LOOK_SPEED));
+	state.axes[2] = (float)fmax(-1.0, fmin(1.0, look_velocity.x * look_sensitivity / LOOK_SPEED));
+	state.axes[3] = (float)fmax(-1.0, fmin(1.0, look_velocity.y * look_sensitivity / LOOK_SPEED));
 	xg_ios_set_touch_pad(&state);
 }
 
