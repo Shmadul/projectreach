@@ -77,25 +77,38 @@ uint32_t hpcom_IDirect3D9_GetAdapterIdentifier_c(uint32_t g, uint32_t adapter, u
     return D3D_OK;
 }
 
-/* Display modes: standard sizes up to the Mac's main display, plus its own size; 60 Hz. */
+/* Display modes: standard sizes up to the main display, the display's own shape at
+familiar widths (a phone's 19.5:9 has no standard size, so Halo would letterbox it), and
+the display's own size; 60 Hz, sorted by width then height. */
 static uint32_t modes(uint32_t (*out)[2], uint32_t max)
 {
     static const uint32_t std[][2] = {{640, 480}, {800, 600}, {1024, 768}, {1152, 864}, {1280, 720}, {1280, 800}, {1280, 960},
                                       {1280, 1024}, {1440, 900}, {1600, 900}, {1600, 1200}, {1680, 1050}, {1920, 1080},
                                       {1920, 1200}, {2048, 1536}, {2560, 1440}, {2560, 1600}};
+    static const uint32_t native_widths[] = {1280, 1600, 1920, 2048};
+    uint32_t candidates[64][2], count = 0;
     int32_t dw, dh;
     halopad_desktop_size(&dw, &dh);
+    for (uint32_t i = 0; i < sizeof std / sizeof std[0]; i++) {
+        candidates[count][0] = std[i][0]; candidates[count][1] = std[i][1]; count++;
+    }
+    for (uint32_t i = 0; dw > 0 && dh > 0 && i < sizeof native_widths / sizeof native_widths[0]; i++) {
+        uint32_t w = native_widths[i], h = (uint32_t)(((uint64_t)w * (uint32_t)dh + (uint32_t)dw) / (2u * (uint32_t)dw)) * 2u;
+        candidates[count][0] = w; candidates[count][1] = h; count++;
+    }
+    candidates[count][0] = (uint32_t)dw; candidates[count][1] = (uint32_t)dh; count++;
     uint32_t n = 0;
-    for (uint32_t i = 0; i < sizeof std / sizeof std[0] && n < max; i++)
-        if (std[i][0] <= (uint32_t)dw && std[i][1] <= (uint32_t)dh) { out[n][0] = std[i][0]; out[n][1] = std[i][1]; n++; }
-    int have = 0;
-    for (uint32_t i = 0; i < n; i++) have |= out[i][0] == (uint32_t)dw && out[i][1] == (uint32_t)dh;
-    if (!have && n < max) {                           /* insert the display's own size in order */
-        uint32_t k = n;
-        while (k > 0 && (out[k - 1][0] > (uint32_t)dw || (out[k - 1][0] == (uint32_t)dw && out[k - 1][1] > (uint32_t)dh))) {
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t w = candidates[i][0], h = candidates[i][1];
+        if (w > (uint32_t)dw || h > (uint32_t)dh) continue;
+        int duplicate = 0;
+        for (uint32_t j = 0; j < n; j++) duplicate |= out[j][0] == w && out[j][1] == h;
+        if (duplicate || n >= max) continue;
+        uint32_t k = n++;                             /* insert in order */
+        while (k > 0 && (out[k - 1][0] > w || (out[k - 1][0] == w && out[k - 1][1] > h))) {
             out[k][0] = out[k - 1][0]; out[k][1] = out[k - 1][1]; k--;
         }
-        out[k][0] = (uint32_t)dw; out[k][1] = (uint32_t)dh; n++;
+        out[k][0] = w; out[k][1] = h;
     }
     return n;
 }

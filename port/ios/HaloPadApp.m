@@ -13,6 +13,7 @@
  * Development builds on the Simulator get their data paths from the environment
  * (scripts/build-ios-app.py passes HALOPAD_* through simctl launch). */
 #import <UIKit/UIKit.h>
+#include <unistd.h>
 #import <AVFoundation/AVFoundation.h>
 #import <GameController/GameController.h>
 #include <stdio.h>
@@ -1837,6 +1838,16 @@ int main(int argc, char *argv[])
         NSString *dir = [docs stringByAppendingPathComponent:@"HaloPad Logs"];
         [NSFileManager.defaultManager createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
         halopad_log_open([dir stringByAppendingPathComponent:@"HaloPad.log"].fileSystemRepresentation);
+        /* stderr (the Xbox engine's internet play, frame and graphics notes) also goes to
+           console.txt beside it, the previous session's kept as console-previous.txt; not
+           when stderr is a terminal, and HALOPAD_NO_CONSOLE_FILE turns it off */
+        if (!isatty(STDERR_FILENO) && !getenv("HALOPAD_NO_CONSOLE_FILE")) {
+            NSString *console = [dir stringByAppendingPathComponent:@"console.txt"];
+            NSString *previous = [dir stringByAppendingPathComponent:@"console-previous.txt"];
+            [NSFileManager.defaultManager removeItemAtPath:previous error:nil];
+            [NSFileManager.defaultManager moveItemAtPath:console toPath:previous error:nil];
+            if (freopen(console.fileSystemRepresentation, "a", stderr)) setvbuf(stderr, NULL, _IOLBF, 0);
+        }
         struct utsname u;
         uname(&u);
         halopad_log("---- HaloPad %s (build %s) on %s, %s %s ----",

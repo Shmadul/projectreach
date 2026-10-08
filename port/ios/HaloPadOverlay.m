@@ -30,7 +30,7 @@
     - (void)set:(type)v { [NSUserDefaults.standardUserDefaults setObject:box forKey:key]; }
 HP_SETTING(CGFloat, controlOpacity, setControlOpacity, @"HaloPad.controlOpacity", @(fmin(1, fmax(0.25, v))), doubleValue)
 HP_SETTING(CGFloat, controlSize, setControlSize, @"HaloPad.controlSize", @(fmin(1.35, fmax(0.7, v))), doubleValue)
-HP_SETTING(CGFloat, lookSensitivity, setLookSensitivity, @"HaloPad.lookSensitivity", @(fmin(6, fmax(0.25, v))), doubleValue)
+HP_SETTING(CGFloat, lookSensitivity, setLookSensitivity, @"HaloPad.lookSensitivity", @(fmin(8, fmax(0.1, v))), doubleValue)
 HP_SETTING(CGFloat, mouseSpeed, setMouseSpeed, @"HaloPad.mouseSpeed", @(fmin(4, fmax(0.25, v))), doubleValue)
 HP_SETTING(BOOL, hideWithController, setHideWithController, @"HaloPad.hideWithController", @(v), boolValue)
 HP_SETTING(BOOL, hideTouchControls, setHideTouchControls, @"HaloPad.hideTouchControls", @(v), boolValue)
@@ -948,6 +948,8 @@ static const hp_control_def CONTROLS[] = {
             }
         }
     }
+    /* Touch controls turned off in game: the three-dot button stays, faint, as the way back */
+    _menuButton.alpha = self.inGame && HPSettings.shared.hideTouchControls && !_editing ? 0.25 : 1;
 }
 
 /* ---- the three-dot menu ---- */
@@ -1389,7 +1391,7 @@ static NSString * const HPRepositoryURL = @"https://github.com/chrissotraidis/pr
     title.font = [UIFont systemFontOfSize:17 weight:UIFontWeightBold];
     _opacity = [self slider:0.25 max:1 action:@selector(opacityChanged:)];
     _size = [self slider:0.7 max:1.35 action:@selector(sizeChanged:)];
-    _look = [self slider:0.25 max:6 action:@selector(lookChanged:)];
+    _look = [self slider:0.1 max:8 action:@selector(lookChanged:)];
     _hideSwitch = [UISwitch new];
     [_hideSwitch addTarget:self action:@selector(hideChanged:) forControlEvents:UIControlEventValueChanged];
     _editSwitch = [UISwitch new];
