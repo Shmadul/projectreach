@@ -6,6 +6,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import os
 import pathlib
 import struct
 import subprocess
@@ -75,7 +76,8 @@ def main():
                 subprocess.run([str(a) for a in argv],cwd=str(work),stdout=log,stderr=subprocess.STDOUT,check=True,timeout=timeout)
         run('srw', [build/'SRW/SRW.exe','arithmetic.exe','arithmetic.llasm'])
         run('llasm', [build/'llasm/llasm','-m64','-ptrofs','-I',ROOT/'ref/sr/SR/llasm-support','-o','arithmetic.ll','arithmetic.llasm'])
-        target = json.loads((ROOT/'toolchains.lock.json').read_text())['target']
+        # HALOPAD_HOST_TARGET: an Intel Mac runs the fixture as x86_64 (the translation is the same IR)
+        target = os.environ.get('HALOPAD_HOST_TARGET') or json.loads((ROOT/'toolchains.lock.json').read_text())['target']
         run('target', ['clang','-target',target,'-S','-emit-llvm','-x','c','/dev/null','-o','host-target.ll'])
         # Upstream emits generic LLVM with no target triple. Supply the actual compiler target.
         triple = next(l for l in (work/'host-target.ll').read_text().splitlines() if l.startswith('target triple ='))
@@ -83,8 +85,8 @@ def main():
         ir.write_text(triple+'\n'+ir.read_text())
         run('compile', ['clang','-target',target,'-O2','-fno-fast-math','-ffp-contract=off','-Wall','-Wextra','-Werror','-I',ROOT/'ref/sr/SR/llasm-support',ROOT/'tests/lifter_arithmetic_harness.c',ir,'-o','native-smoke'])
         arch = subprocess.check_output(['lipo','-archs',str(work/'native-smoke')],text=True).strip()
-        if arch != 'arm64':
-            raise RuntimeError('fixture executable is not exclusively ARM64')
+        if arch != target.split('-')[0]:
+            raise RuntimeError('fixture executable is not exclusively ' + target.split('-')[0])
         run('execute',[work/'native-smoke'])
         if 'PASS: 36 self-authored PE arithmetic cases' not in (evidence/'execute.log').read_text():
             raise RuntimeError('execution result missing expected case count')

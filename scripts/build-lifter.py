@@ -3,6 +3,7 @@
 import datetime
 import hashlib
 import json
+import platform
 import os
 import pathlib
 import shutil
@@ -31,6 +32,8 @@ def tree_digest(base):
     return hashlib.sha256(json.dumps(entries, separators=(',', ':')).encode()).hexdigest()
 
 def ldc_toolchain(lock):
+    if os.environ.get('HALOPAD_LDC2'):              # a local LDC (Intel Macs: the osx-x86_64 release of the pinned version)
+        return pathlib.Path(os.environ['HALOPAD_LDC2'])
     spec = lock['ldc']
     parent = ROOT / 'generated/toolchains'
     parent.mkdir(parents=True, exist_ok=True)
@@ -96,8 +99,8 @@ def main():
         binaries = [build/'SRW/SRW.exe', build/'llasm/llasm']
         for binary in binaries:
             arch = subprocess.check_output(['lipo', '-archs', str(binary)], text=True).strip()
-            if arch != 'arm64':
-                raise RuntimeError('build is not exclusively ARM64')
+            if arch != platform.machine():           # the tools run on this Mac (arm64, or x86_64 on Intel)
+                raise RuntimeError('build is not exclusively ' + platform.machine())
         manifest.update(result='BUILT_NOT_HALO_VALIDATED', artifacts={str(p.relative_to(build)):digest(p) for p in binaries})
         (build/'build-manifest.json').write_text(json.dumps(manifest, indent=2)+'\n')
         print('BUILT:', build.relative_to(ROOT))

@@ -29,6 +29,7 @@ The guest must be compiled with -ffixed-x27 -ffixed-x28 -fno-jump-tables
 Usage: translate.py <halo_guest.elf> <out.s> [--llvm-bin DIR]
 """
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -164,7 +165,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("elf")
     parser.add_argument("out")
-    parser.add_argument("--llvm-bin", default="/opt/homebrew/opt/llvm/bin")
+    parser.add_argument("--llvm-bin", default=os.environ.get("XBOX_LLVM_BIN", "/opt/homebrew/opt/llvm/bin"))
     parser.add_argument("--imports", nargs="*", default=[],
                         help="files listing the import stub names")
     options = parser.parse_args()

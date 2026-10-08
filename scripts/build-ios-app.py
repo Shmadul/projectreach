@@ -58,7 +58,7 @@ MAC_ENTITLEMENTS = {
     'com.apple.security.network.server': True,
     'com.apple.security.files.user-selected.read-write': True,
 }
-BUNDLE_ID = 'dev.halopad.HaloPad'
+BUNDLE_ID = os.environ.get('XG_BUNDLE_ID', 'dev.halopad.HaloPad')   # XG_BUNDLE_ID: the app ID a personal provisioning profile allows
 STATE = ROOT / 'generated' / 'halopad-disk-ios'
 # the Xbox engine, when it was built on this Mac (scripts/xbox/build-ios.sh; docs/XBOX-ENGINE.md)
 XBOX_OUT = ROOT / 'ref' / 'xbox-build' / 'out'
@@ -135,7 +135,7 @@ def xbox_parts(target):
     graphics = ['-lc++', '-lz', '-framework', 'Metal', '-framework', 'IOSurface'] if renderer == 'angle-metal' else ['-framework', 'OpenGLES']
     if 'macabi' in target:
         graphics += ['-framework', 'IOKit']
-    return [ROOT / 'port' / 'ios' / 'HaloPadXbox.m', lib, '-I', str(ROOT / 'port' / 'xbox'), '-I', '/opt/homebrew/include',
+    return [ROOT / 'port' / 'ios' / 'HaloPadXbox.m', lib, '-I', str(ROOT / 'port' / 'xbox'), '-I', os.environ.get('XG_SDL_INCLUDE', '/opt/homebrew/include'),
             *graphics, '-DGLES_SILENCE_DEPRECATION']
 
 

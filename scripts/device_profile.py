@@ -38,8 +38,9 @@ def validate(profile, bundle, identity_sha, device=None, now=None):
         errors.append('profile team is missing or inconsistent')
     if not team or ent.get('application-identifier') != f'{team}.{bundle}':
         errors.append(f'profile App ID must be exactly {bundle} (no wildcard)')
-    if ent.get('get-task-allow') is not True:
-        errors.append('profile is not a development profile')
+    # a development profile, or an ad hoc one: both install on the devices they list
+    if ent.get('get-task-allow') is not True and not profile.get('ProvisionedDevices'):
+        errors.append('profile is neither a development nor an ad hoc profile')
     for key in REQUIRED:
         if ent.get(key) is not True:
             errors.append(f'profile does not grant {key}')

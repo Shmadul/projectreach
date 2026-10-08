@@ -23,14 +23,15 @@ while [ $# -gt 0 ]; do
 	shift
 done
 [ -f "$INSTALLER" ] || { echo "--installer: your HaloCESetup.exe is required" >&2; exit 2; }
-LLVM=/opt/homebrew/opt/llvm/bin
+LLVM=${HALOPAD_LLVM_BIN:-/opt/homebrew/opt/llvm/bin}
 LLD=$(command -v lld-link || echo "$LLVM/lld-link")
 for tool in wine winetricks 7zz "$LLVM/clang" "$LLD" "$LLVM/llvm-dlltool"; do
 	command -v "$tool" >/dev/null || { echo "missing $tool (brew install winetricks sevenzip llvm lld; for Wine see docs/INSTALL-WINE.md)" >&2; exit 2; }
 done
 WORK=$(mktemp -d "$ROOT/generated/product-id-work.XXXXXX")
 # winedbg disabled: a crash fails at once instead of waiting in Wine's debugger
-export WINEPREFIX="$WORK/prefix" WINEDEBUG=-all WINEDLLOVERRIDES="mscoree,mshtml=;winedbg=d"
+# HALOPAD_WINEPREFIX: a CrossOver bottle instead (Intel Macs, toolchain/wine-shim)
+export WINEPREFIX="${HALOPAD_WINEPREFIX:-$WORK/prefix}" WINEDEBUG=-all WINEDLLOVERRIDES="mscoree,mshtml=;winedbg=d"
 cleanup() { wineserver -k >/dev/null 2>&1 || true; rm -rf "$WORK"; }
 trap cleanup EXIT INT TERM
 
