@@ -11,6 +11,7 @@ against the hashes pinned here. Needs 7-Zip (7zz). Nothing is executed.
 Usage: .venv/bin/python scripts/extract-reference-components.py
 """
 import hashlib
+import os
 import pathlib
 import shutil
 import subprocess
@@ -19,7 +20,7 @@ import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / 'ref' / 'HaloCESetup.exe'
-INSTALLER_SHA256 = '150e430dc54ffb265cbe96605ef8909c9ba0065fa11bdbf170bfd88391cf98ba'
+INSTALLER_SHA256 = os.environ.get('HALOPAD_INSTALLER_SHA', '150e430dc54ffb265cbe96605ef8909c9ba0065fa11bdbf170bfd88391cf98ba')  # another wrapper of the same 1.00 files (prepare-patched-client.sh checks the result)
 OUT = ROOT / 'ref' / 'inputs' / 'reference-machine' / 'system32'
 # (file in XML_Core.cab, installed name, SHA-256)
 FILES = [('msxml4.dll.sxs.2E8D8EBB_CC16_45E1_BBCA_CB1ED881EDB7', 'msxml4.dll',

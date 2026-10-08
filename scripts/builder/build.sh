@@ -68,7 +68,7 @@ if ! "$PY" -c 'import pefile, capstone, SCons' 2>/dev/null; then   # a fresh che
 fi
 
 step "finding your installer and the 1.10 update by hash"
-INSTALLER_SHA=150e430dc54ffb265cbe96605ef8909c9ba0065fa11bdbf170bfd88391cf98ba
+INSTALLER_SHA=${HALOPAD_INSTALLER_SHA:-150e430dc54ffb265cbe96605ef8909c9ba0065fa11bdbf170bfd88391cf98ba}   # another wrapper of the same 1.00 files: the patched haloce.exe is checked
 PATCH_SHA=33818f3f56b7dddc8c61d654af6567c9c5b9220ca75d6ac23a52611038257508
 INSTALLER=""; PATCH=""
 while IFS= read -r -d '' f; do

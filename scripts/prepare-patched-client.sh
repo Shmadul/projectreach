@@ -12,7 +12,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PY="$ROOT/.venv/bin/python"
 INSTALLER="$ROOT/ref/HaloCESetup.exe"
 PATCH="$ROOT/ref/inputs/patches/haloce-patch-1.0.10.exe"
-INSTALLER_SHA=150e430dc54ffb265cbe96605ef8909c9ba0065fa11bdbf170bfd88391cf98ba
+INSTALLER_SHA=${HALOPAD_INSTALLER_SHA:-150e430dc54ffb265cbe96605ef8909c9ba0065fa11bdbf170bfd88391cf98ba}   # another wrapper of the same 1.00 files: the patched haloce.exe is checked
 PATCH_SHA=33818f3f56b7dddc8c61d654af6567c9c5b9220ca75d6ac23a52611038257508
 TARGETS=(haloce.exe haloceded.exe Strings.dll binkw32.dll config.txt patchw32.dll msvcr71.dll)
 TIMEOUT_S=${HALOPAD_PATCH_TIMEOUT:-240}
@@ -105,6 +105,10 @@ while true; do
   fi
 done
 echo "patched after $((SECONDS - start))s" > "$EVID/timing.txt"
+# a different installer wrapper is accepted only if it yields HaloPad's exact 1.10 client
+ACCEPTED=feea46fce285ec071016cf5534abe47ecf36f6cfac8f1973ee6919851ea5a037
+[[ -z "${HALOPAD_INSTALLER_SHA:-}" || "$(sha "$WORK/files/haloce.exe")" == "$ACCEPTED" ]] \
+  || die "the patched haloce.exe differs from HaloPad's accepted 1.10 client"
 stop_bottle
 pgrep -f "haloupdate.exe processrtp" >/dev/null && die "updater still running after stop"
 

@@ -22,9 +22,9 @@ import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / 'ref' / 'HaloCESetup.exe'
-INSTALLER_SHA = '150e430dc54ffb265cbe96605ef8909c9ba0065fa11bdbf170bfd88391cf98ba'
+INSTALLER_SHA = os.environ.get('HALOPAD_INSTALLER_SHA', '150e430dc54ffb265cbe96605ef8909c9ba0065fa11bdbf170bfd88391cf98ba')  # another wrapper of the same 1.00 files (prepare-patched-client.sh checks the result)
 PATCH_SHA = '33818f3f56b7dddc8c61d654af6567c9c5b9220ca75d6ac23a52611038257508'
-EXCLUDED_TOP = ('$PLUGINSDIR', 'directx', 'redist')
+EXCLUDED_TOP = ('$PLUGINSDIR', 'directx', 'redist', '.rsrc')   # .rsrc: a Setup.exe wrapper's own embedded cabinet
 PATCH_TOOLING = {'haloupdate.exe', 'patch.rtp'}
 
 
